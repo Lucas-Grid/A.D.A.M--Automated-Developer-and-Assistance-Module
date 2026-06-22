@@ -1,0 +1,19 @@
+# ADAM OS application settings
+app:
+  name: "ADAM OS"
+  environment: "development"
+  debug: true
+
+data:
+  dir: "data"
+  db: "data/adam.db"
+  workspace: "data/workspace"
+
+api:
+  host: "127.0.0.1"
+  port: 8000
+  prefix: "/api/v1"
+
+connections:
+  ollama_base_url: "http://localhost:11434"
+  powershell_executable: "powershell.exe"

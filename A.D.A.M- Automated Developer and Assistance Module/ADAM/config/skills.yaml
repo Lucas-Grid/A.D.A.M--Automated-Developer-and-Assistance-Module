@@ -1,0 +1,6 @@
+skills:
+  - name: system.status
+    version: "0.1.0"
+    entrypoint: ADAM.skills.builtins.system.SystemSkill
+    enabled: true
+    tags: ["builtin", "system"]
