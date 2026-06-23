@@ -1,0 +1,139 @@
+# ADAM OS .gitignore
+# Generated: 2026-06-23
+# Repository audit revealed the following ignore patterns are required.
+
+# =============================================================================
+# RUNTIME-GENERATED DATA
+# =============================================================================
+
+# SQLite databases (runtime data)
+*.db
+*.sqlite3
+
+# ChromaDB vector stores (large binary data)
+chroma.sqlite3
+data/vector_store/
+**/chroma.sqlite3
+
+# Memory store (runtime state)
+data/memory_store/
+
+# =============================================================================
+# PYTHON ARTIFACTS
+# =============================================================================
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-vimba
+
+# =============================================================================
+# TEST & COVERAGE ARTIFACTS
+# =============================================================================
+
+# Pytest cache
+.pytest_cache/
+pytest_current/
+
+# Coverage data
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# =============================================================================
+# LOGS & TEMPORARY FILES
+# =============================================================================
+
+# Log files
+*.log
+logs/*.log
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Windows temp artifacts
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# IDE & EDITOR FILES
+# =============================================================================
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# SESSIONS & DEBUG
+# =============================================================================
+
+# IPython / Jupyter
+.profile_default/
+
+# Debug files
+*.pdb
+
+# =============================================================================
+# MIGRATIONS (TRACKED)
+# =============================================================================
+# NOTE: migrations/ directory IS tracked (contains baseline.py)
+# Alembic version history files will be tracked:
+migrations/versions/*.py
+
+# =============================================================================
+# PRESERVED PATHS (MUST BE TRACKED)
+# =============================================================================
+# The following are explicitly NOT ignored:
+# - ADAM/*.py (source code)
+# - ADAM/*.yaml (configuration templates)
+# - ADAM/*.md (documentation)
+# - ADAM/config/*.yaml (user configuration templates)
+# - ADAM/migrations/env.py (migration runner)
+# - pyproject.toml, requirements.txt (build config)
+# - README.md (root)
