@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtual env
+venv/
+.venv/
+
+# Database
+*.db
+data/*.db
+
+# ChromaDB
+data/vector_store/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.*
