@@ -25,6 +25,7 @@ class MemoryStore:
 
     def _ensure_tables(self) -> None:
         with self._connect() as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS memory (
@@ -44,7 +45,7 @@ class MemoryStore:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     memory_id INTEGER NOT NULL,
                     embedding BLOB,
-                    FOREIGN KEY(memory_id) REFERENCES memory(id)
+                    FOREIGN KEY(memory_id) REFERENCES memory(id) ON DELETE CASCADE
                 )
                 """
             )

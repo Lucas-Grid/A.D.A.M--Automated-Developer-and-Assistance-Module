@@ -39,6 +39,26 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     powershell_executable: str = "powershell.exe"
 
+    # Provider API keys (optional; loaded from env)
+    openai_api_key: str = ""
+    openrouter_api_key: str = ""
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    together_api_key: str = ""
+    mistral_api_key: str = ""
+    nvidia_api_key: str = ""
+
+    # Provider endpoints (override defaults if needed)
+    openai_base_url: str = "https://api.openai.com/v1"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    anthropic_base_url: str = "https://api.anthropic.com"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    together_base_url: str = "https://api.together.xyz/v1"
+    mistral_base_url: str = "https://api.mistral.ai/v1"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+
     # Security
     allowed_workspace_roots: list[str] = []
 

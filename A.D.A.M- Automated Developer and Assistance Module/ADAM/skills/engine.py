@@ -29,12 +29,89 @@ class SkillEngine:
             WorkspaceScanSkill,
             WorkspaceSummarySkill,
         )
+        from ADAM.skills.model.skills import (  # noqa: F401
+            ModelDiscoverSkill,
+            ModelHealthSkill,
+            ModelListSkill,
+            ModelSelectSkill,
+        )
+        from ADAM.skills.automation.skills import (  # noqa: F401
+            AutomationCreateSkill,
+            AutomationDisableSkill,
+            AutomationEnableSkill,
+            AutomationListSkill,
+            AutomationRunSkill,
+        )
+        from ADAM.skills.knowledge.skills import (  # noqa: F401
+            KnowledgeAddEntitySkill,
+            KnowledgeAddRelationshipSkill,
+            KnowledgeContextSkill,
+            KnowledgeSearchSkill,
+        )
+        from ADAM.skills.aiops.skills import (  # noqa: F401
+            ContextBuildSkill,
+            MemoryReindexSkill,
+            VectorIndexSkill,
+            VectorSearchSkill,
+        )
+        from ADAM.skills.agents.skills import (  # noqa: F401
+            AgentCreateSkill,
+            AgentDisableSkill,
+            AgentEnableSkill,
+            AgentListSkill,
+            AgentRunSkill,
+        )
+        from ADAM.skills.agents.builtins import seed_builtin_agents
+        from ADAM.skills.llm.skills import (  # noqa: F401
+            LLMChatSkill,
+            LLMHealthSkill,
+            LLMRouteSkill,
+            LLMStreamSkill,
+        )
+        from ADAM.skills.ecc.skills import (  # noqa: F401
+            ECCPlanSkill,
+            ECCReasonSkill,
+            ECCReflectSkill,
+            ECCValidateSkill,
+        )
+
+        seed_builtin_agents()
 
         builtins = [
             ("system.status", SystemSkill, ["builtin", "system"]),
             ("workspace.scan", WorkspaceScanSkill, ["workspace", "builtin"]),
             ("workspace.analyze", WorkspaceAnalyzeSkill, ["workspace", "builtin"]),
             ("workspace.summary", WorkspaceSummarySkill, ["workspace", "builtin"]),
+            ("model.discover", ModelDiscoverSkill, ["model", "builtin"]),
+            ("model.list", ModelListSkill, ["model", "builtin"]),
+            ("model.health", ModelHealthSkill, ["model", "builtin"]),
+            ("model.select", ModelSelectSkill, ["model", "builtin"]),
+            ("automation.create", AutomationCreateSkill, ["automation", "builtin"]),
+            ("automation.run", AutomationRunSkill, ["automation", "builtin"]),
+            ("automation.list", AutomationListSkill, ["automation", "builtin"]),
+            ("automation.enable", AutomationEnableSkill, ["automation", "builtin"]),
+            ("automation.disable", AutomationDisableSkill, ["automation", "builtin"]),
+            ("knowledge.add_entity", KnowledgeAddEntitySkill, ["knowledge", "builtin"]),
+            ("knowledge.add_relationship", KnowledgeAddRelationshipSkill, ["knowledge", "builtin"]),
+            ("knowledge.search", KnowledgeSearchSkill, ["knowledge", "builtin"]),
+            ("knowledge.context", KnowledgeContextSkill, ["knowledge", "builtin"]),
+            ("vector.index", VectorIndexSkill, ["aiops", "builtin"]),
+            ("vector.search", VectorSearchSkill, ["aiops", "builtin"]),
+            ("context.build", ContextBuildSkill, ["aiops", "builtin"]),
+            ("memory.reindex", MemoryReindexSkill, ["aiops", "builtin"]),
+            ("agent.create", AgentCreateSkill, ["agent", "builtin"]),
+            ("agent.list", AgentListSkill, ["agent", "builtin"]),
+            ("agent.enable", AgentEnableSkill, ["agent", "builtin"]),
+            ("agent.disable", AgentDisableSkill, ["agent", "builtin"]),
+            ("agent.run", AgentRunSkill, ["agent", "builtin"]),
+            ("llm.chat", LLMChatSkill, ["llm", "builtin"]),
+            ("llm.stream", LLMStreamSkill, ["llm", "builtin"]),
+            ("llm.health", LLMHealthSkill, ["llm", "builtin"]),
+            ("llm.route", LLMRouteSkill, ["llm", "builtin"]),
+            ("ecc.reason", ECCReasonSkill, ["ecc", "builtin"]),
+            ("ecc.plan", ECCPlanSkill, ["ecc", "builtin"]),
+            ("ecc.validate", ECCValidateSkill, ["ecc", "builtin"]),
+            ("ecc.reflect", ECCReflectSkill, ["ecc", "builtin"]),
         ]
         for name, cls, tags in builtins:
             try:

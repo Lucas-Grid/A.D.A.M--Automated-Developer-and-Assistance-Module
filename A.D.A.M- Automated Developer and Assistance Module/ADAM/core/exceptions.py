@@ -31,3 +31,27 @@ class PowerShellError(ConnectionError):
 
 class WorkspaceError(AdamError):
     """Workspace intelligence error."""
+
+
+class ModelRegistryError(AdamError):
+    """Model registry error."""
+
+
+class ProviderError(AdamError):
+    """Provider connection/authentication error."""
+
+
+class AutomationError(AdamError):
+    """Automation engine error."""
+
+
+class KnowledgeGraphError(AdamError):
+    """Knowledge graph error."""
+
+
+class AIOpsError(AdamError):
+    """AI Ops and vector memory error."""
+
+
+class AgentError(AdamError):
+    """Agent runtime error."""
