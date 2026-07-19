@@ -160,8 +160,20 @@ def _load_dict(path: str) -> dict[str, Any]:
 
 
 def load_config(path: Optional[str] = None) -> Config:
-    path = path or os.environ.get("JARVIS_CONFIG") or os.path.join(os.getcwd(), ".jarvis.yaml")
-    raw = _load_dict(path)
+    # Resolution order: explicit arg -> JARVIS_CONFIG env -> ./jarvis.yaml in cwd
+    # -> the package-bundled jarvis/.jarvis.yaml (so `python -m jarvis` works
+    # from anywhere without copying the config). A user config always wins.
+    candidates = [
+        path,
+        os.environ.get("JARVIS_CONFIG"),
+        os.path.join(os.getcwd(), ".jarvis.yaml"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".jarvis.yaml"),
+    ]
+    raw: dict[str, Any] = {}
+    for cand in candidates:
+        if cand and os.path.isfile(cand):
+            raw = _load_dict(cand)
+            break
     providers: list[ProviderSpec] = []
     for p in raw.get("providers", []) or []:
         if isinstance(p, dict):

@@ -28,3 +28,22 @@ def test_cli_selects_configured_default_provider():
     orch = build_orchestrator(cfg)
     # provider.model is the real signal of which provider was selected
     assert orch.provider.model == "stepfun-ai/step-3.7-flash"
+
+
+def test_load_config_falls_back_to_bundled_config():
+    # From a directory with no ./jarvis.yaml and no JARVIS_CONFIG, load_config
+    # must resolve the package-bundled jarvis/.jarvis.yaml (nim default),
+    # NOT silently fall back to the bare local provider.
+    import tempfile
+    prev = os.environ.pop("JARVIS_CONFIG", None)
+    cwd = os.getcwd()
+    tmp = tempfile.mkdtemp()
+    try:
+        os.chdir(tmp)  # no ./jarvis.yaml here
+        cfg = load_config()
+        assert cfg.default_provider == "nim", cfg.default_provider
+        assert any(s.name == "nim" for s in cfg.providers)
+    finally:
+        os.chdir(cwd)
+        if prev is not None:
+            os.environ["JARVIS_CONFIG"] = prev

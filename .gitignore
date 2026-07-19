@@ -1,30 +1,24 @@
 # Python
 __pycache__/
-*.pyc
-.pytest_cache/
+*.py[cod]
+*.egg-info/
+build/
+dist/
 
-# Virtual env
-venv/
-.venv/
-
-# Database
+# Jarvis runtime data
+jarvis_memory.db
+jarvis_vector.db
 *.db
-data/*.db
 
-# ChromaDB
-data/vector_store/
+# Test/run artifacts
+*.out
+report.json
 
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# Windows
+# OS
 Thumbs.db
-Desktop.ini
+.DS_Store
 
-# Environment
-.env
-.env.*
+# Virtual envs
+.venv/
+venv/
+env/
