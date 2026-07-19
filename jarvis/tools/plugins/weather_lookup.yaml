@@ -1,0 +1,14 @@
+# Sample Jarvis plugin (§10). Drop YAML files in jarvis/tools/plugins/ and they
+# are registered automatically on startup. Each declares a Python `body` that
+# returns a ToolResult. The body runs in a constrained namespace with `ctx`,
+# `kwargs`, and `ToolResult` available.
+name: weather_lookup
+description: Look up a (fake) current weather summary for a city. Demo plugin.
+danger: safe
+permissions: []
+sandbox_profile: none
+args:
+  city: string (required)
+body: |
+  city = kwargs.get("city", "unknown")
+  return ToolResult(ok=True, output=f"(demo) {city}: 21C, partly cloudy.", tool="weather_lookup")

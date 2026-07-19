@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis-assistant"
+version = "0.1.0"
+description = "Desktop-centric autonomous AI assistant: agentic coding, live desktop agency, build-from-prompt, semantic memory, multi-provider LLM routing."
+readme = "README_JARVIS.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Lucas Grid" }]
+keywords = ["ai", "agent", "assistant", "llm", "automation", "desktop"]
+dependencies = [
+    "fastapi",
+    "requests",
+    "pyautogui",
+    "pillow",
+    "pytesseract",
+]
+
+[project.optional-dependencies]
+browser = ["playwright"]
+docker = ["docker"]
+
+[project.scripts]
+jarvis = "jarvis.cli:main"
+
+[tool.setuptools]
+packages = ["jarvis", "jarvis.tools", "jarvis.providers"]

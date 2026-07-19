@@ -1,0 +1,61 @@
+# Jarvis configuration — copy to .jarvis.yaml and edit.
+# Secrets are NEVER stored here: api_key: env:VAR reads from the environment.
+
+providers:
+  # NVIDIA NIM is the MAIN provider (OpenAI-compatible). Get a key from
+  # https://build.nvidia.com/ and export it:  export NVIDIA_NIM_API_KEY=...
+  - name: nim
+    type: nous
+    model: stepfun-ai/step-3.7-flash   # fast; swap to openai/gpt-oss-120b for max capability
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key: env:NVIDIA_NIM_API_KEY
+    enabled: true
+    kwargs:
+      timeout: 60            # cap each request so transient stalls recover quickly
+
+  # Stronger NVIDIA NIM model (opt-in). Flip `enabled: true` and set
+  # default_provider: nim_oss120b to use it for harder agentic tasks.
+  - name: nim_oss120b
+    type: nous
+    model: openai/gpt-oss-120b
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key: env:NVIDIA_NIM_API_KEY
+    enabled: false
+    kwargs:
+      timeout: 90
+
+  # Local Ollama models (no key). `ollama pull qwen3:8b` first.
+  - name: ollama
+    type: ollama
+    model: qwen3:8b
+    base_url: http://localhost:11434
+
+  # Optional: OpenRouter / Nous / any OpenAI-compatible endpoint.
+  - name: openrouter
+    type: openai_compat
+    vendor: openrouter
+    model: meta-llama/llama-3.1-8b-instruct
+    base_url: https://openrouter.ai/api/v1
+    api_key: env:OPENROUTER_API_KEY
+    enabled: false
+
+default_provider: nim
+
+# Code execution sandbox. Docker is optional (off by default = time-limited
+# subprocess with a restricted builtins set).
+sandbox:
+  use_docker: false
+  timeout: 10
+
+# Memory store location (key-value + telemetry).
+memory:
+  db_path: jarvis_memory.db
+
+# Agent loop.
+max_steps: 12
+require_confirmation: true   # human-in-the-loop gate for high-danger tools
+workspace: "."
+
+# Response cache (§4.3).
+cache:
+  ttl_seconds: 300

@@ -1,0 +1,55 @@
+# Jarvis runtime config. Secrets are NEVER written here: the NIM key is read
+# from the NVIDIA_NIM_API_KEY environment variable at load time (env:VAR).
+# NVIDIA NIM is the preferred/main provider; Ollama is a local fallback.
+
+default_provider: nim
+
+providers:
+  - name: nim
+    type: nous               # NVIDIA NIM is OpenAI-compatible; routed via the compat adapter
+    model: stepfun-ai/step-3.7-flash
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key: env:NVIDIA_NIM_API_KEY
+    enabled: true
+    kwargs:
+      timeout: 60            # cap each request so transient stalls recover quickly
+  - name: nim_oss120b
+    type: nous               # stronger NVIDIA NIM model for harder agentic tasks
+    model: openai/gpt-oss-120b
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key: env:NVIDIA_NIM_API_KEY
+    enabled: false           # opt-in; switch default_provider to this for max capability
+    kwargs:
+      timeout: 90
+  - name: ollama
+    type: ollama
+    model: qwen3:8b          # local coder (no key)
+    base_url: http://localhost:11434
+    enabled: true
+  - name: ollama_small
+    type: ollama
+    model: llama3.2:3b       # lighter local model
+    base_url: http://localhost:11434
+    enabled: true
+  - name: local
+    type: local
+    model: deterministic
+    enabled: true             # always-available fallback
+
+# §4.2 model selector: prefer the configured main provider; weight cost/quality
+model_selector:
+  weights:
+    cost: 0.3
+    latency: 0.3
+    modality: 0.4
+
+# §4.3 response cache: memoize repeats (set 0 to disable)
+cache:
+  ttl_seconds: 0
+
+max_steps: 20
+require_confirmation: true   # HITL gate for moderate/high tools in the CLI
+workspace: "."
+
+sandbox:
+  use_docker: false

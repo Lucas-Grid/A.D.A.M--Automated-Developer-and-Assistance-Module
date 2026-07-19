@@ -1,0 +1,12 @@
+# Runtime dependencies for Jarvis.
+# Install with:  pip install -r requirements.txt
+# (The hermes-agent venv may need:  python -m ensurepip --upgrade  first.)
+fastapi>=0.110
+requests>=2.28
+pyautogui>=0.9.54
+pillow>=10.0
+pytesseract>=0.3.10
+
+# Optional (uncomment if needed):
+# playwright>=1.40        # browser automation tool
+# docker>=7.0             # Docker sandbox isolation
