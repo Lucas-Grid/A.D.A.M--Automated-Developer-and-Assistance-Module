@@ -23,6 +23,8 @@ sys.path.insert(0, PROJECT)
 
 VERBOSE = "-v" in sys.argv
 ONLY = next((a for a in sys.argv[1:] if not a.startswith("-")), None)
+if ONLY and ONLY.startswith("test_"):
+    ONLY = ONLY[len("test_"):]  # accept 'test_live' or 'live'
 
 
 def _load(modpath: str):
