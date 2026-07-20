@@ -86,7 +86,7 @@ _LOOP: Optional[asyncio.AbstractEventLoop] = None
 # --------------------------------------------------------------------------
 # App
 # --------------------------------------------------------------------------
-def build_gui_app() -> FastAPI:
+def build_gui_app(autostart_voice: bool = True) -> FastAPI:
     cfg = load_config()
     providers = build_providers(cfg)
     default_name = effective_default_provider(cfg)
@@ -100,6 +100,8 @@ def build_gui_app() -> FastAPI:
 
     app = FastAPI(title="Jarvis Holographic GUI", version="0.1.0")
     _mount(app, orch, cfg)
+    if autostart_voice:
+        _autostart_voice(orch)
     return app
 
 
@@ -203,7 +205,8 @@ def _voice_available() -> bool:
 def _start_voice(orch: Orchestrator, mode: str) -> None:
     global _voice
     if _voice is not None:
-        return
+        _voice.stop()
+        _voice = None
     from jarvis.voice_input import VoiceInput
 
     def on_command(text: str) -> None:
@@ -237,6 +240,20 @@ def _stop_voice() -> None:
     if _voice is not None:
         _voice.stop()
         _voice = None
+
+
+def _autostart_voice(orch: Orchestrator) -> None:
+    """If a voice backend is present, begin continuous listening on launch so
+    Jarvis responds to voice out of the box (say 'Jarvis' wake word, or full
+    hands-free if enabled)."""
+    try:
+        from jarvis.voice_input import VoiceInput
+
+        if VoiceInput(lambda _: None).available:
+            _start_voice(orch, "wake")
+            GUI_STATE.set(mic_on=True, state="listening")
+    except Exception:
+        pass
 
 
 def main() -> None:
