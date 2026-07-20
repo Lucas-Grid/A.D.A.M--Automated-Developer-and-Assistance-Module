@@ -137,8 +137,8 @@ class Voice:
         try:
             voices = speaker.GetVoices()
             preferred = None
-            rank = ["neural", "online", "natural", "aria", "jenny", "zira",
-                    "hazel", "guy", "susan", "george", "david"]
+            rank = ["neural", "online", "natural", "aria", "jenny", "david",
+                    "george", "guy", "zira", "hazel", "susan"]
             best_idx, best_score = -1, 999
             for i in range(voices.Count):
                 desc = (voices.Item(i).GetDescription() or "").lower()
