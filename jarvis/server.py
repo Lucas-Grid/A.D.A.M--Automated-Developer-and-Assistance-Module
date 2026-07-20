@@ -11,7 +11,7 @@ import json
 
 from fastapi import FastAPI, HTTPException, Request
 
-from jarvis.config import load_config
+from jarvis.config import load_config, effective_default_provider
 from jarvis.memory import Memory
 from jarvis.orchestrator import Orchestrator
 from jarvis.providers.registry import build_providers, get_provider
@@ -22,7 +22,15 @@ from jarvis.tools.registry import ToolRegistry
 def build_app() -> FastAPI:
     cfg = load_config()
     providers = build_providers(cfg)
-    prov = providers.get(cfg.default_provider) or get_provider()
+    # Offline-first: if the configured default needs a key that isn't present,
+    # use the always-available local brain instead of failing on 401s.
+    default_name = effective_default_provider(cfg)
+    if default_name != cfg.default_provider:
+        print(
+            f"[jarvis] no credential for default provider '{cfg.default_provider}'; "
+            f"falling back to '{default_name}' (offline brain)."
+        )
+    prov = providers.get(default_name) or get_provider()
     use_docker = bool(cfg.sandbox.get("use_docker"))
     # Fresh registry per app instance: the server must not inherit tools
     # registered into the process-global registry elsewhere (e.g. a meta-tool

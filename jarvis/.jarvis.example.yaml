@@ -1,5 +1,10 @@
 # Jarvis configuration — copy to .jarvis.yaml and edit.
 # Secrets are NEVER stored here: api_key: env:VAR reads from the environment.
+#
+# Offline-first: if a provider's API key (env:VAR) is not set when Jarvis
+# starts, it automatically falls back to the built-in `local` brain (no key,
+# no network) for that provider. So the CLI, demo, and server all run out of
+# the box with no configuration. Set the key below and the model becomes live.
 
 providers:
   # NVIDIA NIM is the MAIN provider (OpenAI-compatible). Get a key from
@@ -29,6 +34,13 @@ providers:
     type: ollama
     model: qwen3:8b
     base_url: http://localhost:11434
+
+  # Local deterministic brain: always available, no key, no network. Used
+  # automatically when every remote provider is missing its key.
+  - name: local
+    type: local
+    model: deterministic
+    enabled: true
 
   # Optional: OpenRouter / Nous / any OpenAI-compatible endpoint.
   - name: openrouter

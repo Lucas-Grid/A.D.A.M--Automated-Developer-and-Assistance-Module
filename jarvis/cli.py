@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 import os
 
-from jarvis.config import load_config
+from jarvis.config import load_config, effective_default_provider
 from jarvis.memory import Memory
 from jarvis.orchestrator import Orchestrator
 from jarvis.providers.registry import build_providers
@@ -33,7 +33,17 @@ def _run_tests() -> None:
 
 def build_orchestrator(cfg) -> Orchestrator:
     providers = build_providers(cfg)
-    prov = providers.get(cfg.default_provider)
+    # Offline-first: if the configured default provider needs a key that isn't
+    # present, fall back to the always-available local brain so Jarvis works
+    # out of the box with no API key (and doesn't burn steps on 401 retries).
+    default_name = effective_default_provider(cfg)
+    if default_name != cfg.default_provider:
+        print(
+            f"[jarvis] no credential for default provider '{cfg.default_provider}'; "
+            f"using '{default_name}' (offline brain). Set the API key + "
+            f"default_provider in .jarvis.yaml to use a real model."
+        )
+    prov = providers.get(default_name)
     if prov is None:
         from jarvis.providers.registry import get_provider
 

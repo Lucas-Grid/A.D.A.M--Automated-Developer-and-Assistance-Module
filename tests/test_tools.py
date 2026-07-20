@@ -91,3 +91,20 @@ def test_git_commit_on_clean_repo_is_honest():
     # git exits 1 with 'nothing to commit' — the message lands in output
     assert (not r.ok) and "nothing to commit" in (r.output or ""), (r.error, r.output)
     shutil.rmtree(ws, ignore_errors=True)
+
+
+def test_path_whitespace_is_normalized():
+    """Models wrap paths in stray newlines (e.g. '\\n./dir\\n'); the file tools
+    must strip them so Windows doesn't raise WinError 123."""
+    reg = register_default_tools(use_docker=False)
+    ws, ctx = _ctx(allow=True)
+    reg.get("init_project").run(ctx, name="dp", language="python", description="x")
+    # A path wrapped in newlines must resolve to the same dir, not error.
+    r = reg.get("file_list").run(ctx, path="\n./dp\n")
+    assert r.ok, r.error
+    assert "main.py" in r.output, r.output
+
+    # edit_file with a newline-wrapped path must write, not WinError.
+    r2 = reg.get("edit_file").run(ctx, path="\n./dp/main.py\n", content="print('ok')\n")
+    assert r2.ok, r2.error
+    shutil.rmtree(ws, ignore_errors=True)

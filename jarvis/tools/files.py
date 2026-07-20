@@ -7,6 +7,18 @@ from typing import Any
 from jarvis.tools.registry import Tool, ToolContext, ToolResult
 
 
+def _norm_path(ctx: ToolContext, path: str) -> str:
+    """Join ``path`` to the workspace, stripping stray whitespace/newlines that
+    models sometimes wrap around paths (e.g. '\\n./build_x\\n'), which would
+    otherwise raise WinError 123 on Windows."""
+    if not path:
+        return ctx.workspace
+    path = path.strip().strip("\r\n\t")
+    if not path:
+        return ctx.workspace
+    return os.path.join(ctx.workspace, path) if not os.path.isabs(path) else path
+
+
 class FileListTool(Tool):
     name = "file_list"
     description = "List files and directories in a path (defaults to the workspace root)."
@@ -14,7 +26,7 @@ class FileListTool(Tool):
     schema = {"path": "string - directory to list (default '.')"}
 
     def run(self, ctx: ToolContext, path: str = ".", **_: Any) -> ToolResult:
-        target = os.path.join(ctx.workspace, path) if not os.path.isabs(path) else path
+        target = _norm_path(ctx, path)
         try:
             entries = []
             for name in sorted(os.listdir(target)):
@@ -31,14 +43,13 @@ class FileReadTool(Tool):
     description = "Read the text contents of a file (first 2000 lines)."
     danger = "safe"
     schema = {"path": "string (required) - file to read"}
-
     MAX_BYTES = 200_000
 
     def run(self, ctx: ToolContext, path: str = "", **kw: Any) -> ToolResult:
         path = path or kw.get("filename") or kw.get("file") or kw.get("filepath") or ""
         if not path:
             return ToolResult(ok=False, output="", tool=self.name, error="path is required")
-        target = os.path.join(ctx.workspace, path) if not os.path.isabs(path) else path
+        target = _norm_path(ctx, path)
         if not os.path.isfile(target):
             return ToolResult(ok=False, output="", tool=self.name, error=f"Not a file: {path}")
         try:
@@ -60,7 +71,7 @@ class FileWriteTool(Tool):
         content = content or kw.get("text") or ""
         if not path:
             return ToolResult(ok=False, output="", tool=self.name, error="path is required")
-        target = os.path.join(ctx.workspace, path) if not os.path.isabs(path) else path
+        target = _norm_path(ctx, path)
         if not ctx.confirm(f"Write {len(content)} chars to {target}?"):
             return ToolResult(ok=False, output="", tool=self.name, error="Cancelled by user.")
         try:

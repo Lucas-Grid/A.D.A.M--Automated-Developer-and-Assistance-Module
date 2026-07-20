@@ -49,3 +49,27 @@ def test_local_loop_respects_max_steps():
     ans = orch.chat("asdfqwer zxcv", verbose=False)
     assert isinstance(ans, str)
     shutil.rmtree(ws, ignore_errors=True)
+
+
+def test_local_brain_build_scaffolds_runnable_project():
+    """The local brain's offline 'build ...' must scaffold a real runnable app
+    (init_project), not loop or silently no-op. Prove the artifact works."""
+    import subprocess
+
+    ws, orch = _orch()
+    try:
+        ans = orch.chat("build a tiny python app", verbose=False)
+        assert "Created project" in ans, ans
+        # Find the scaffolded dir and run its main.py to confirm it's runnable.
+        made = None
+        for d in os.listdir(ws):
+            if os.path.isdir(os.path.join(ws, d)) and os.path.isfile(os.path.join(ws, d, "main.py")):
+                made = d
+                break
+        assert made is not None, "no scaffolded project created"
+        out = subprocess.run(f'python "{os.path.join(ws, made, "main.py")}"',
+                              shell=True, capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        assert "Hello from" in out.stdout, out.stdout
+    finally:
+        shutil.rmtree(ws, ignore_errors=True)

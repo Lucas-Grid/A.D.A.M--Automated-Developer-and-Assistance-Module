@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from typing import Any
 
@@ -22,6 +23,12 @@ from jarvis.tools.registry import Tool, ToolContext, ToolResult
 
 
 def _resolve(ctx: ToolContext, path: str) -> str:
+    if not path:
+        return ctx.workspace
+    # Models sometimes emit paths wrapped in stray whitespace/newlines
+    # (e.g. "\n./build_x\n"); strip control chars before joining so we don't
+    # hit WinError 123 ("filename syntax is incorrect") on Windows.
+    path = path.strip().strip("\r\n\t")
     if not path:
         return ctx.workspace
     if os.path.isabs(path):
@@ -251,7 +258,7 @@ class RunTestsTool(Tool):
                 except Exception:
                     have_pytest = False
                 if have_pytest:
-                    cmd = "python -m pytest -q"
+                    cmd = f"{sys.executable} -m pytest -q"
                 else:
                     # Run unittest via a generated runner script: `python -m
                     # unittest discover` crashes or finds 0 tests on some
@@ -275,9 +282,9 @@ class RunTestsTool(Tool):
                             "res = unittest.TextTestRunner(verbosity=1).run(suite)\n"
                             "sys.exit(0 if res.wasSuccessful() else 1)\n"
                         )
-                    cmd = f'python "{runner}"'
+                    cmd = f'{sys.executable} "{runner}"'
             else:
-                cmd = "python -m unittest discover"
+                cmd = f"{sys.executable} -m unittest discover"
         # Make the project itself importable (handles src/ and flat layouts).
         env_path = workdir + _os.pathsep + _os.path.join(workdir, "src")
         import subprocess as _sp

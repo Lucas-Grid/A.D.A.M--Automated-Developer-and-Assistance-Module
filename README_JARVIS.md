@@ -8,7 +8,16 @@ code executor, and a short/long-term memory layer.
 It runs **out of the box with no API key and no network** (a built-in
 deterministic "local brain"), and you can plug in real LLM providers
 (Ollama, OpenAI-compatible endpoints like Nous/OpenRouter/OpenAI, Anthropic)
-via a config file.
+via a config file. When the configured default provider is missing its API
+key, Jarvis automatically falls back to the local brain at startup, so the
+CLI, demo, and server always launch.
+
+**Scope of the local (key-free) brain:** it can run Python in a sandbox, list
+and read files, store/recall facts, and run web searches. It does **not** invent
+free-form natural-language answers, and it has no branch for `edit_file`,
+`run_shell`, or `build_project` — those tools require a real LLM provider
+(NIM/Ollama). For full agentic coding ("build me an app"), configure a real
+provider. The local brain is the offline smoke-test path, not the full product.
 
 ## Features
 - **Multi-provider LLM routing** — local (key-free), Ollama, OpenAI-compatible.
@@ -24,6 +33,16 @@ via a config file.
 - **Task side-channel + telemetry** (jarvis-ai-assistant / OpenJarvis patterns)
   — sub-tasks are tracked separately from the conversation context, and every
   step records latency/token cost via `ask_full()`.
+- **Holographic GUI + voice control** — `python -m jarvis gui` boots a
+  self-contained holographic HUD (canvas: rotating HUD rings + an interactive
+  pulse that reacts to Jarvis' live state: idle / listening / thinking /
+  speaking) served at `http://127.0.0.1:8000`. A WebSocket bridge streams state
+  + transcript in real time. Optional voice input (wake word "Jarvis" or
+  hands-free) routes speech straight into the assistant; a "hands-free" toggle
+  auto-confirms desktop actions so you can drive the computer by voice.
+- **Screen perception** — `screen_capture` / `screen_understand` OCR the real
+  desktop (Tesseract) and optionally describe it via a vision-LLM, so Jarvis
+  can *see* what's on screen.
 - **Human-in-the-loop** — moderate/high-danger tools require confirmation in
   the CLI; the server runs auto-confirm but blocks nothing destructive by default.
 - **Tool permissions + sandbox profiles (§3.1)** — every tool declares the
@@ -140,8 +159,36 @@ jarvis/
   orchestrator.py      # the agent loop + ask_full() (content/tool_results/telemetry/tasks)
   cli.py               # interactive REPL
   server.py            # FastAPI service
+  gui.py               # holographic HUD server (WS + voice bridge)
+  gui/holo.html        # self-contained canvas HUD (pulse rings, transcript)
+  voice_input.py       # optional STT: wake-word + hands-free (vosk/SR)
   demo.py              # end-to-end smoke test
 ```
+
+## Holographic GUI & voice control
+```bash
+python -m jarvis gui            # opens the holographic HUD at http://127.0.0.1:8000
+```
+The HUD is a self-contained `jarvis/gui/holo.html` (no build step, no CDN): a
+rotating circular HUD with concentric **interactive pulse** rings that change
+color and motion with Jarvis' live state. In the browser, use the **Mic** and
+**Hands-free** buttons:
+
+- **Mic on** starts voice input (wake word "Jarvis", then your command; or
+  hands-free continuous mode). Recognized speech is routed into the assistant
+  and the HUD shows it.
+- **Hands-free on** auto-confirms desktop actions (clicks / typing / app
+  launches) so you can operate the computer entirely by voice. Leave it off to
+  keep the CLI-style confirmation gate.
+
+Voice input is **optional**. Install one backend (Jarvis runs fine without it):
+- Offline (recommended, no API key): `pip install vosk` + download a model
+  from https://alphacephei.com/vosk/models, then set `VOSK_MODEL_PATH`.
+- Online: `pip install SpeechRecognition pyaudio` (uses Google STT).
+
+Computer control (mouse, keyboard, clicks, app launch) is already wired via
+`pyautogui` (`desktop_click`, `desktop_type`, `desktop_move`, `desktop_hotkey`,
+`app_launch`). Screen perception is `screen_capture` / `screen_understand`.
 
 ## Security model
 - Generated code runs time-limited (10s) and with a restricted builtins set by

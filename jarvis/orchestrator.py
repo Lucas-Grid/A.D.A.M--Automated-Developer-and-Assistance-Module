@@ -124,7 +124,15 @@ class Orchestrator:
             except Exception as e:  # never let a tool crash the loop
                 res = ToolResult(ok=False, output="", tool=tool_name, error=repr(e))
             ms = (time.perf_counter() - t0) * 1000
-            self.telemetry.record(tool_name, ms, tokens=len(str(args)))
+            # Report REAL token usage when the provider supplied it; otherwise
+            # fall back to counting the characters of the arguments we sent.
+            usage = getattr(result, "usage", None) or {}
+            tok = usage.get("total_tokens")
+            if tok is None:
+                tok = usage.get("completion_tokens")
+            if tok is None:
+                tok = len(str(args))
+            self.telemetry.record(tool_name, ms, tokens=tok)
             self.tasks.add(f"{tool_name}({_short_args(args)})")
             obs = res.format_for_prompt()
             self.short.add("tool", obs, tool=tool_name)

@@ -27,21 +27,31 @@ class WebSearchTool(Tool):
             )
             resp.raise_for_status()
             html = resp.text
-            # crude result extraction
+            # crude result extraction (best-effort; DDG's HTML layout changes)
             import re
 
             titles = re.findall(r'result__a"[^>]*>(.*?)</a>', html, re.S)
             snips = re.findall(r'result__snippet"[^>]*>(.*?)</a>', html, re.S)
-            clean = lambda s: re.sub(r"<[^>]+>", "", s).strip()
+            clean = lambda s: re.sub(r"<[^>]+>", "", s).strip()  # noqa: E731
             out = []
             for i, t in enumerate(titles[: int(limit)]):
                 snippet = clean(snips[i]) if i < len(snips) else ""
                 out.append(f"{i+1}. {clean(t)}\n   {snippet}")
             if not out:
-                return ToolResult(ok=True, output="(no results / parser blocked)", tool=self.name)
+                # No parseable results (layout changed or blocked) — degrade
+                # gracefully instead of raising. Surface the raw status so the
+                # caller/agent can adapt.
+                return ToolResult(
+                    ok=True,
+                    output=f"(no web results parsed for {query!r}; search backend returned no parseable hits)",
+                    tool=self.name,
+                )
             return ToolResult(ok=True, output="\n".join(out), tool=self.name)
+        except requests.exceptions.RequestException as e:
+            # Network/HTTP failure: report, don't crash the agent loop.
+            return ToolResult(ok=False, output="", tool=self.name, error=f"web search failed: {e}")
         except Exception as e:
-            return ToolResult(ok=False, output="", tool=self.name, error=str(e))
+            return ToolResult(ok=False, output="", tool=self.name, error=f"web search error: {e}")
 
 
 class MemoryStoreTool(Tool):

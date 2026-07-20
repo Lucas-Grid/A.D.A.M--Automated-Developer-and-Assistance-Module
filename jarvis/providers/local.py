@@ -88,6 +88,34 @@ class LocalProvider(LLMProvider):
             key = m.group(1).strip().rstrip("?") if m else request
             return {"tool": "memory_recall", "args": {"key": key}}
 
+        # Build a project from a prompt (Phase C). The local brain can scaffold a
+        # real runnable project via init_project (no LLM needed), but the heavier
+        # build_project needs an LLM to implement files — so defer that to a real
+        # provider and keep the offline path honest/useful instead of looping.
+        if re.match(r"(?i)^\s*(build|create|make|scaffold|generate)\b", request) and (
+            "build " in r or "build_project" in r or "project" in r or "app" in r
+        ):
+            prompt = re.sub(r"(?i)^(build|create|make|scaffold|generate)\s+(me\s+|a\s+|an\s+|the\s+)?", "", request).strip(" .")
+            # Offline: scaffold a runnable project; the LLM-driven builder is for
+            # real providers. init_project creates a working 'hello' app reliably.
+            return {"tool": "init_project", "args": {"name": self._slug(prompt), "language": "python", "description": prompt}}
+
+        # Run a shell command.
+        if re.search(r"\b(run_shell|shell|execute|bash|sh\b|cmd)\b", r):
+            cmd = re.sub(r"(?i)^(run_shell|shell|execute|bash|sh|cmd)\b[:\s]*", "", request).strip()
+            if cmd:
+                return {"tool": "run_shell", "args": {"command": cmd}}
+
+        # Edit/write a file — only when a real path AND code content are present
+        # (the orchestrator pulls the fenced block as content). Without both we
+        # can't act, so fall through to a plain answer instead of an error loop.
+        if re.search(r"\b(edit_file|write|create file|save file)\b", r) or "edit_file" in r:
+            m = re.search(r"(?:edit_file|write|create file|save file)\s+([\w./\\-]+)", r)
+            path = m.group(1) if m else ""
+            content = self._extract_code(request)
+            if path and content:
+                return {"tool": "edit_file", "args": {"path": path, "content": content}}
+
         # Web search.
         if re.search(r"\b(search|look up|google|find out|research)\b", r):
             q = re.sub(r"(?i)(please\s+)?(search|look up|google|find out|research)\s+(for\s+|about\s+)?", "", request)
@@ -116,6 +144,14 @@ class LocalProvider(LLMProvider):
         # catalogue lines look like:  - name (desc)
         names = re.findall(r"-\s+([a-z_][a-z0-9_]*)\s*\(", catalogue)
         return names
+
+    @staticmethod
+    def _slug(text: str, max_len: int = 24) -> str:
+        """Turn a free-text prompt into a filesystem-safe project name."""
+        import re as _re
+        slug = _re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+        slug = slug[:max_len].strip("_")
+        return slug or "project"
 
     @staticmethod
     def _extract_code(text: str) -> str | None:

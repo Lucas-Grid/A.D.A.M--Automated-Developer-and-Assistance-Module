@@ -5,7 +5,7 @@ No API key or network required -- it proves plan -> act -> observe -> answer.
 """
 from __future__ import annotations
 
-from jarvis.config import load_config
+from jarvis.config import load_config, effective_default_provider
 from jarvis.memory import Memory
 from jarvis.orchestrator import Orchestrator
 from jarvis.providers.registry import build_providers, get_provider
@@ -23,7 +23,10 @@ SCENARIOS = [
 def main() -> None:
     cfg = load_config()
     providers = build_providers(cfg)
-    prov = providers.get(cfg.default_provider) or get_provider()
+    # Offline-first: prefer the configured default, but fall back to the local
+    # brain when its credential is missing so the demo always runs.
+    default_name = effective_default_provider(cfg)
+    prov = providers.get(default_name) or get_provider()
     reg = register_default_tools(use_docker=False)
     mem = Memory(db_path=":memory:")  # ephemeral for the demo
     orch = Orchestrator(

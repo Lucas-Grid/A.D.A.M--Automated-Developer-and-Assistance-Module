@@ -8,8 +8,37 @@ given via JARVIS_CONFIG) overrides defaults.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+# Providers that require a credential to actually answer. The local and ollama
+# providers run without a key; everything routed through a hosted API needs one.
+_KEYLESS_PROVIDER_TYPES = {"local", "ollama"}
+
+
+def _provider_needs_key(spec: "ProviderSpec") -> bool:
+    """A hosted provider is unusable without a key (or, for ollama, a reachable
+    local server). Used to decide offline-first fallback at startup."""
+    if spec.type in _KEYLESS_PROVIDER_TYPES:
+        return False
+    return not bool(spec.api_key)
+
+
+_KEY_ENV_RE = re.compile(r"^env:(.+)$")
+
+
+def resolve_env_keys(providers: list["ProviderSpec"]) -> None:
+    """Expand ``env:VAR`` references so secrets stay out of config files.
+
+    Mutates the specs in place. A reference to a missing variable becomes the
+    empty string (which then flags the provider as needing a key).
+    """
+    for p in providers:
+        if isinstance(p.api_key, str):
+            m = _KEY_ENV_RE.match(p.api_key)
+            if m:
+                p.api_key = os.environ.get(m.group(1), "")
 
 
 @dataclass
@@ -202,7 +231,25 @@ def load_config(path: Optional[str] = None) -> Config:
         model_selector=raw.get("model_selector", {}) or {},
     )
     # Expand `env:VAR` references so secrets stay out of config files.
-    for _p in cfg.providers:
-        if isinstance(_p.api_key, str) and _p.api_key.startswith("env:"):
-            _p.api_key = os.environ.get(_p.api_key[4:], "")
+    resolve_env_keys(cfg.providers)
     return cfg
+
+
+def effective_default_provider(cfg: "Config") -> str:
+    """Return the provider name Jarvis should actually use at startup.
+
+    Offline-first: if the configured ``default_provider`` needs a key/credential
+    that is absent, fall back to ``local`` (which is always available) instead of
+    burning the agent's step budget on 401 retries. This keeps the README promise
+    that Jarvis runs out of the box with no API key.
+    """
+    default = cfg.default_provider
+    by_name = {s.name: s for s in cfg.providers}
+    chosen = by_name.get(default)
+    if chosen is not None and not _provider_needs_key(chosen):
+        return default
+    # Chosen provider is missing a key; prefer the always-available local brain.
+    if "local" in by_name and not _provider_needs_key(by_name["local"]):
+        return "local"
+    # Otherwise keep the original default and let the provider surface the error.
+    return default
