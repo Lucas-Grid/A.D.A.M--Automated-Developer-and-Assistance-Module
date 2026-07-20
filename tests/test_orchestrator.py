@@ -51,6 +51,16 @@ def test_local_loop_respects_max_steps():
     shutil.rmtree(ws, ignore_errors=True)
 
 
+def test_chat_stream_yields_full_answer():
+    ws, orch = _orch()
+    parts = list(orch.chat_stream("run this python: print('hi')", verbose=False))
+    joined = "".join(parts)
+    assert joined and "hi" in joined, joined
+    # chat() (non-streaming wrapper) must equal the joined streamed answer.
+    assert orch.chat("run this python: print('hi')", verbose=False) == joined
+    shutil.rmtree(ws, ignore_errors=True)
+
+
 def test_local_brain_build_scaffolds_runnable_project():
     """The local brain's offline 'build ...' must scaffold a real runnable app
     (init_project), not loop or silently no-op. Prove the artifact works."""

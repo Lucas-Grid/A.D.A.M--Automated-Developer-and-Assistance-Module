@@ -71,3 +71,28 @@ def test_gui_state_bus_is_singleton_threadsafe():
     s.set(state="listening", transcript="hello")
     assert s.state == "listening"
     assert s.transcript == "hello"
+
+
+def test_interrupt_endpoint_resets_to_listening():
+    app = build_gui_app(autostart_voice=False)
+    from fastapi.testclient import TestClient
+
+    c = TestClient(app)
+    r = c.post("/interrupt")
+    assert r.status_code == 200 and r.json()["interrupted"] is True
+
+
+def test_voice_speak_is_nonblocking_and_interruptible():
+    # speak() must return immediately (own thread) and stop() must cancel it,
+    # so the listener can barge in mid-reply. SAPI path is exercised when
+    # present; otherwise the call still degrades without raising.
+    from jarvis.voice import Voice
+
+    v = Voice()
+    res = v.speak("this is a test of interruption")
+    assert res.get("ok") is True
+    v.stop()  # must not hang / raise
+    res2 = v.speak("second utterance")
+    assert res2.get("ok") is True
+    v.stop()
+

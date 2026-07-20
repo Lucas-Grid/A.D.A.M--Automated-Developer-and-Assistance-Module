@@ -159,15 +159,25 @@ def _mount(app: FastAPI, orch: Orchestrator, cfg) -> None:
         if not message.strip():
             return JSONResponse({"error": "message required"}, status_code=400)
         GUI_STATE.set(state="thinking", transcript=message)
-        answer = orch.chat(message, verbose=False)
+        answer = "".join(orch.chat_stream(message, verbose=False))  # streamed, but /ask returns full text
         GUI_STATE.set(state="speaking", transcript=answer)
-        # speak if TTS available; never blocks
+        # speak non-blocking (own thread) so the mic keeps listening for barge-in
         try:
             orch.voice.speak(answer)
         except Exception:
             pass
         GUI_STATE.set(state="idle")
         return {"answer": answer}
+
+    @app.post("/interrupt")
+    async def interrupt() -> dict:
+        """Stop any in-progress speech immediately (barge-in / user cut-off)."""
+        try:
+            orch.voice.stop()
+        except Exception:
+            pass
+        GUI_STATE.set(state="listening")
+        return {"interrupted": True}
 
     @app.post("/listen")
     async def listen(request: Request):
@@ -264,13 +274,27 @@ def _start_voice(orch: Orchestrator, mode: str) -> None:
         _voice = None
     from jarvis.voice_input import VoiceInput
 
+    def barge_in() -> None:
+        # User started speaking while Jarvis was talking -> cut the reply short.
+        try:
+            orch.voice.stop()
+        except Exception:
+            pass
+
     def on_command(text: str) -> None:
         text = (text or "").strip()
         if not text:
             return
+        # Interrupt any ongoing reply before processing the new command.
+        try:
+            orch.voice.stop()
+        except Exception:
+            pass
         GUI_STATE.set(state="thinking", transcript=text)
         try:
-            answer = orch.chat(text, verbose=False)
+            # Stream the answer so it begins forming immediately; collect for
+            # the HUD transcript + speak it aloud (non-blocking).
+            answer = "".join(orch.chat_stream(text, verbose=False))
         except Exception as e:
             answer = f"(error: {e})"
         GUI_STATE.set(state="speaking", transcript=answer)
@@ -278,9 +302,9 @@ def _start_voice(orch: Orchestrator, mode: str) -> None:
             orch.voice.speak(answer)
         except Exception:
             pass
-        GUI_STATE.set(state="idle")
+        GUI_STATE.set(state="listening")
 
-    vi = VoiceInput(on_command=on_command)
+    vi = VoiceInput(on_command=on_command, barge_callback=barge_in)
     if not vi.available:
         GUI_STATE.push({"type": "transcript",
                         "text": "(voice input not installed: pip install vosk + model)"})

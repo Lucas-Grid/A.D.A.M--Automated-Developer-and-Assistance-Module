@@ -2,23 +2,22 @@
 
 Strategy (tried in order, graceful degrade):
   * Primary: OpenAI-compatible TTS via NVIDIA NIM (nvidia/... speech models)
-    using the same NVIDIA_NIM_API_KEY as the LLM. NIM exposes /v1/audio/speech.
+    using the same NVIDIA_NIM_API_KEY as the LLM.
   * Fallback: OpenAI TTS-1 if OPENAI_API_KEY is set.
   * OFFLINE fallback (no key): Windows SAPI via pywin32 (Cortana/desktop voices).
     This is what makes Jarvis actually SPEAK on a normal Windows box with no
     API key configured.
-  * If nothing is available, speak() is a graceful no-op returning the text so
-    the assistant still "responds" without audio.
 
-When a .wav is produced, we also PLAY it (best-effort, no extra deps):
-SAPI handles its own playback; for downloaded audio we use winsound (Windows)
-or platform players. Callers get status + path so they can play themselves too.
+Speaking is NON-BLOCKING and INTERRUPTIBLE: each call runs in a daemon thread
+and a later speak()/stop() cancels any in-progress utterance, so the user can
+barge in mid-sentence (hotword/energy interruption) while Jarvis keeps listening.
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import threading
 import tempfile
 from typing import Optional
 
@@ -41,21 +40,51 @@ class Voice:
         self.openai_model = openai_model
         self.voice = voice
         self.timeout = timeout
+        # Active speech thread so we can interrupt it (barge-in).
+        self._speak_thread: Optional[threading.Thread] = None
+        self._stop_flag = threading.Event()
 
     def available(self) -> bool:
-        return bool(self.nim_key or self.openai_key)
+        # Cloud keys OR offline SAPI both count as "can speak".
+        return bool(self.nim_key or self.openai_key or _sapi_available())
 
-    def speak(self, text: str, out_path: Optional[str] = None) -> dict:
-        """Synthesize ``text`` to speech. Returns a dict with status + path/b64.
+    def _active_provider(self) -> str:
+        if self.nim_key:
+            return "nim"
+        if self.openai_key:
+            return "openai"
+        return "sapi"
 
-        Never raises: on any failure or when no provider is configured, returns
-        ok=False with the original text so callers can degrade gracefully.
+    def stop(self) -> None:
+        """Interrupt any in-progress speech immediately (barge-in)."""
+        self._stop_flag.set()
+        t = self._speak_thread
+        if t is not None and t.is_alive():
+            t.join(timeout=0.5)
+        self._speak_thread = None
+        # SAPI speakers are COM objects; nothing else to tear down here.
+
+    def speak(self, text: str, block: bool = False, out_path: Optional[str] = None) -> dict:
+        """Speak ``text`` aloud. NON-BLOCKING by default (returns at once so the
+        assistant/voice thread stays free to listen for interruptions). Set
+        ``block=True`` only for quick self-tests.
         """
-        import requests
-
         text = (text or "").strip()
         if not text:
             return {"ok": False, "error": "empty text", "text": text}
+
+        self.stop()  # cancel any prior utterance so new replies take over
+        self._stop_flag.clear()
+        t = threading.Thread(target=self._speak_sync, args=(text, out_path), daemon=True)
+        self._speak_thread = t
+        t.start()
+        if block:
+            t.join(timeout=self.timeout + 5)
+        return {"ok": True, "provider": self._active_provider(), "text": text}
+
+    # ---- synchronous worker (runs in a daemon thread) --------------------
+    def _speak_sync(self, text: str, out_path: Optional[str]) -> None:
+        import requests
 
         providers = []
         if self.nim_key:
@@ -80,28 +109,16 @@ class Voice:
                 with open(path, "wb") as fh:
                     fh.write(audio)
                 self._play(path)
-                return {
-                    "ok": True,
-                    "provider": name,
-                    "path": path,
-                    "audio_base64": base64.b64encode(audio).decode("utf-8"),
-                    "format": "audio/wav",
-                    "text": text,
-                }
+                return
             except Exception as exc:  # network/parse failure -> try next provider
                 last_err = f"{name}: {exc}"
 
         # No cloud provider worked (or none configured): try OFFLINE SAPI so
         # Jarvis still speaks with no API key.
         try:
-            res = self._speak_sapi(text, out_path=out_path)
-            if res.get("ok"):
-                return res
-            last_err = last_err or res.get("error", "sapi failed")
+            self._speak_sapi(text, out_path=out_path)
         except Exception as exc:
             last_err = last_err or f"sapi: {exc}"
-
-        return {"ok": False, "error": last_err or "all providers failed", "text": text}
 
     # ---- offline TTS (Windows SAPI, no key) -------------------------------
     @staticmethod

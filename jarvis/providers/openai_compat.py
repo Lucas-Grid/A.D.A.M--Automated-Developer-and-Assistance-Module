@@ -107,6 +107,65 @@ class OpenAICompatibleProvider(LLMProvider):
                 _time.sleep(wait)
         raise last_err or RuntimeError(f"{self.vendor} request failed")
 
+    def stream_generate(
+        self,
+        messages: Sequence[Message],
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        stop: Sequence[str] | None = None,
+    ):
+        """Yield text deltas (str) as the model generates them (SSE streaming).
+
+        Falls back to yielding the whole text once if the endpoint rejects the
+        streaming request. This is what lets the HUD + voice reply start the
+        instant the first tokens exist instead of after the full answer.
+        """
+        if not self.model:
+            raise ValueError(f"Provider '{self.vendor}' requires a model name in config.")
+        system, chat = self.split_roles(messages)
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": chat,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if system:
+            payload["messages"].insert(0, {"role": "system", "content": system})
+        if stop:
+            payload["stop"] = list(stop)
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        try:
+            with requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+                stream=True,
+            ) as resp:
+                resp.raise_for_status()
+                for raw in resp.iter_lines():
+                    if not raw:
+                        continue
+                    line = raw.decode("utf-8", "replace")
+                    if line.startswith("data:"):
+                        chunk = line[len("data:"):].strip()
+                        if chunk == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(chunk)
+                            delta = data["choices"][0]["delta"].get("content") or ""
+                            if delta:
+                                yield delta
+                        except Exception:
+                            continue
+        except Exception as e:
+            # Endpoint/streaming hiccup: emit nothing here; the caller's
+            # fallback (non-streaming generate) handles recovery.
+            raise e
+
     def list_models(self) -> list[str]:
         """Enumerate models available under this provider's credentials."""
         if not self.api_key and self.vendor not in ("local", "ollama"):

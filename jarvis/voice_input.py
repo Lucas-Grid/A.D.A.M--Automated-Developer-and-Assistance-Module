@@ -44,6 +44,7 @@ class VoiceInput:
         on_command: Callable[[str], None],
         wake_word: str = WakeWord,
         sample_rate: int = 16000,
+        barge_callback: Optional[Callable[[], None]] = None,
     ) -> None:
         self.on_command = on_command
         self.wake_word = wake_word.lower()
@@ -53,6 +54,12 @@ class VoiceInput:
         self._thread: Optional[threading.Thread] = None
         self._engine = None
         self._engine_kind: Optional[str] = None
+        # Buffer of recent partial+fuzz text so a wake word spoken in one
+        # utterance and the command in the next (or mid-sentence) are both seen.
+        self._recent: list[str] = []
+        # Called when the user starts speaking (energy/voice detected) so the
+        # assistant can interrupt any in-progress reply (barge-in).
+        self.barge_callback = barge_callback
         self._init_engine()
 
     # ---- capability -------------------------------------------------------
@@ -118,8 +125,6 @@ class VoiceInput:
 
         model_path = _vosk_model_path()
         if model_path is None:
-            # No model downloaded; emit a one-time notice and idle.
-            self.on_command("")  # no-op; GUI notices availability separately
             print("[voice-input] vosk installed but no model found; "
                   "download e.g. vosk-model-small-en-us to enable offline STT.")
             return
@@ -127,16 +132,46 @@ class VoiceInput:
         rec = vosk.KaldiRecognizer(model, self.sample_rate)
         q: "queue.Queue" = queue.Queue()
 
+        import struct
+
+        def _rms(indata: bytes) -> float:
+            try:
+                nums = struct.unpack(f"<{len(indata) // 2}h", indata)
+                return (sum(x * x for x in nums) / max(1, len(nums))) ** 0.5
+            except Exception:
+                return 0.0
+
         def _cb(indata, frames, t, status):
             q.put(bytes(indata))
 
-        with sd.RawInputStream(samplerate=self.sample_rate, blocksize=8000,
-                               dtype="int16", channels=1, callback=_cb):
-            while self._running:
-                data = q.get()
-                if rec.AcceptWaveform(data):
-                    text = _vosk_text(rec.Result())
-                    self._handle(text)
+        # Crash-safe: if the mic stream dies, restart it instead of ending the
+        # listener (the assistant must keep listening at all times).
+        while self._running:
+            try:
+                with sd.RawInputStream(samplerate=self.sample_rate, blocksize=8000,
+                                       dtype="int16", channels=1, callback=_cb):
+                    while self._running:
+                        data = q.get()
+                        if _rms(data) > 250:  # speech-level energy -> barge in
+                            if self.barge_callback is not None:
+                                try:
+                                    self.barge_callback()
+                                except Exception:
+                                    pass
+                        if rec.AcceptWaveform(data):
+                            text = _vosk_text(rec.Result())
+                            self._handle(text)
+                        else:
+                            partial = _vosk_text(rec.PartialResult())
+                            if partial:
+                                self._recent.append(partial)
+                                if len(self._recent) > 6:
+                                    self._recent.pop(0)
+                                self._handle(partial)
+            except Exception as e:
+                print(f"[voice-input] mic stream error, restarting: {e}")
+                import time as _t
+                _t.sleep(1)
 
     def _loop_sr(self) -> None:
         import speech_recognition as sr
@@ -195,15 +230,27 @@ class VoiceInput:
         low = text.lower()
         if self.mode == "continuous":
             self.on_command(text)
+            self._recent.clear()
             return
-        # wake mode: require the wake word, then pass the remainder.
+        # wake mode: the wake word may appear in this utterance OR in a recent
+        # buffered partial. If the wake word is present, emit everything after
+        # it (this utterance's command); if not but a recent buffer already
+        # contained it, treat THIS as the command. Debounced via _recent clear.
         if self.wake_word in low:
-            # strip the wake word (and a following comma/colon) and emit rest.
             rest = low.split(self.wake_word, 1)[1]
-            rest = rest.lstrip(" ,:.-")
+            rest = rest.lstrip(" ,:.-\n")
+            self._recent.clear()
             if rest:
                 self.on_command(rest)
-        # else: ignore (not addressed to Jarvis)
+            return
+        # No wake word in this utterance: if a recent partial already said the
+        # wake word, this is the command. Otherwise ignore.
+        if any(self.wake_word in b for b in self._recent):
+            combined = " ".join(self._recent[-3:] + [low])
+            self._recent.clear()
+            cmd = combined.replace(self.wake_word, "", 1).strip(" ,:.-\n")
+            if cmd:
+                self.on_command(cmd)
 
 
 def _vosk_text(result_json: str) -> str:

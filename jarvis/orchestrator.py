@@ -61,6 +61,17 @@ class Orchestrator:
     # --- public API ---------------------------------------------------------
     def chat(self, user_input: str, verbose: bool = True) -> str:
         """Run one request through the agent loop and return the final answer."""
+        parts = list(self.chat_stream(user_input, verbose=verbose))
+        return "".join(parts)
+
+    def chat_stream(self, user_input: str, verbose: bool = True):
+        """Run one request and **yield text deltas** of the final answer.
+
+        Behaves like :meth:`chat` but streams the model's final response as it
+        arrives, so the HUD + voice can start reacting immediately instead of
+        waiting for the whole answer. Tool-calling turns run internally and only
+        the final natural-language answer is streamed.
+        """
         self.short.clear()  # each request is a fresh turn for the local planner
         self.short.add("user", user_input)
         system = self._system_prompt(self._recalled_context(user_input))
@@ -69,9 +80,6 @@ class Orchestrator:
                 Message(m["role"], m["content"], tool_name=m.get("tool")) for m in self.short.snapshot()
             ]
             try:
-                # Agent turns are stateful (they depend on prior tool results),
-                # so never serve a cached response here — that would replay stale
-                # tool calls. The cache is only for stateless one-shot generates.
                 result = self.provider.generate(messages)
             except Exception as exc:  # provider/network failure -> retry the turn
                 err = f"[provider error] {exc}"
@@ -81,13 +89,23 @@ class Orchestrator:
                 continue
             action = self._parse_action(result.text or "")
             if action is None:
-                # Provider chose to answer directly (or returned no parseable text).
+                # Final answer. Stream it token-by-token if the provider supports
+                # streaming, otherwise yield the whole thing at once.
                 text = result.text or ""
-                self.short.add("assistant", text)
                 if verbose:
                     print(f"\n[Jarvis] {text}")
-                return text
-
+                self.short.add("assistant", text)
+                try:
+                    streamed = False
+                    for delta in self.provider.stream_generate(messages):
+                        streamed = True
+                        yield delta
+                    if not streamed:
+                        yield text
+                except Exception:
+                    yield text
+                return
+            # Tool call: execute normally (not streamed), then loop.
             tool_name = action["tool"]
             args = action.get("args", {}) or {}
             tool = self.registry.get(tool_name)
@@ -97,17 +115,13 @@ class Orchestrator:
                 if verbose:
                     print(f"  [step {step+1}] {obs}")
                 continue
-
             if verbose:
                 print(f"  [step {step+1}] -> {tool_name}({_short_args(args)})")
-
-            # Human-in-the-loop gate for risky tools.
             if self.require_confirmation and tool.danger in ("moderate", "high"):
                 if not self._confirm(tool, args):
                     obs = "ERROR: action cancelled by user."
                     self.short.add("tool", obs, tool=tool_name)
                     continue
-
             ctx = ToolContext(
                 workspace=self.workspace,
                 memory=self.memory,
@@ -124,28 +138,21 @@ class Orchestrator:
             except Exception as e:  # never let a tool crash the loop
                 res = ToolResult(ok=False, output="", tool=tool_name, error=repr(e))
             ms = (time.perf_counter() - t0) * 1000
-            # Report REAL token usage when the provider supplied it; otherwise
-            # fall back to counting the characters of the arguments we sent.
             usage = getattr(result, "usage", None) or {}
-            tok = usage.get("total_tokens")
-            if tok is None:
-                tok = usage.get("completion_tokens")
-            if tok is None:
-                tok = len(str(args))
+            tok = usage.get("total_tokens") or usage.get("completion_tokens") or len(str(args))
             self.telemetry.record(tool_name, ms, tokens=tok)
             self.tasks.add(f"{tool_name}({_short_args(args)})")
             obs = res.format_for_prompt()
             self.short.add("tool", obs, tool=tool_name)
             if verbose:
                 print(f"        {obs[:300]}")
-
         final = (
             "I reached the step limit without producing a final answer. "
             "Here is the last observation:\n"
             + (self.short.snapshot()[-1]["content"] if self.short.snapshot() else "(none)")
         )
         self.short.add("assistant", final)
-        return final
+        yield final
 
     def ask_full(self, user_input: str, verbose: bool = False) -> dict[str, Any]:
         """OpenJarvis-style: return content + tool_results + telemetry."""

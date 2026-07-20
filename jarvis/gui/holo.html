@@ -69,6 +69,7 @@
     <select id="model" class="btn" title="Select model / provider">
       <option value="">model…</option>
     </select>
+    <button class="btn" id="stop">Stop</button>
     <button class="btn" id="mic">Mic: off</button>
     <button class="btn" id="handsfree">Hands-free: off</button>
   </div>
@@ -153,6 +154,13 @@ function connect() {
   ws.onclose = () => { setTimeout(connect, 1500); };
 }
 connect();
+
+const stopBtn = document.getElementById('stop');
+stopBtn.onclick = async () => {
+  try {
+    await fetch('/interrupt', { method: 'POST' });
+  } catch (e) {}
+};
 
 micBtn.onclick = async () => {
   const micOn = !micBtn.classList.contains('on');
