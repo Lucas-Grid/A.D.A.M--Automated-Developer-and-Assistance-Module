@@ -104,13 +104,21 @@ def build_gui_app() -> FastAPI:
 
 
 def _mount(app: FastAPI, orch: Orchestrator, cfg) -> None:
-    holo_path = os.path.join(os.path.dirname(__file__), "gui", "holo.html")
+    gui_dir = os.path.dirname(__file__)
+    holo_path = os.path.join(gui_dir, "gui", "holo.html")
     html = ""
     try:
         with open(holo_path, "r", encoding="utf-8") as fh:
             html = fh.read()
     except Exception:
         html = "<h1>holo.html missing</h1>"
+
+    # Serve the bundled SiriWave library (and any other gui assets) offline,
+    # so the HUD needs no CDN.
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/gui-assets", StaticFiles(directory=os.path.join(gui_dir, "gui")),
+              name="gui-assets")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
