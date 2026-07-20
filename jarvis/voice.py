@@ -137,8 +137,8 @@ class Voice:
         try:
             voices = speaker.GetVoices()
             preferred = None
-            rank = ["neural", "online", "natural", "aria", "jenny", "guy",
-                    "zira", "hazel", "susan", "george", "david"]
+            rank = ["neural", "online", "natural", "aria", "jenny", "zira",
+                    "hazel", "guy", "susan", "george", "david"]
             best_idx, best_score = -1, 999
             for i in range(voices.Count):
                 desc = (voices.Item(i).GetDescription() or "").lower()
@@ -152,9 +152,10 @@ class Voice:
         except Exception:
             pass
 
-        # Calm, natural cadence (Rate -1 ≈ slightly slower than default).
+        # Lively, conversational cadence: a touch faster than default, full
+        # volume. Pair shorter sentence chunks so SAPI adds natural pauses.
         try:
-            speaker.Rate = -1
+            speaker.Rate = 1
             speaker.Volume = 100
         except Exception:
             pass
