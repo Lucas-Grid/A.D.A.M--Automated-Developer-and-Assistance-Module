@@ -48,6 +48,8 @@ class GuiState:
         self.energy = 0.0
         self.handsfree = False
         self.mic_on = False
+        self.model = ""              # active provider name (model selector)
+        self.model_id = ""           # active model id
         self._clients: set[WebSocket] = set()
         self._lock = threading.Lock()
 
@@ -67,6 +69,8 @@ class GuiState:
                 "state": self.state,
                 "transcript": self.transcript,
                 "energy": self.energy,
+                "model": self.model,
+                "model_id": self.model_id,
             }
         data = json.dumps(msg)
         dead: list[WebSocket] = []
@@ -99,6 +103,10 @@ def build_gui_app(autostart_voice: bool = True) -> FastAPI:
     )
 
     app = FastAPI(title="Jarvis Holographic GUI", version="0.1.0")
+    # Stash the built providers + config on the orchestrator so the model
+    # selector endpoints can swap the active provider live (no restart).
+    orch._providers = providers  # type: ignore[attr-defined]
+    orch._cfg = cfg  # type: ignore[attr-defined]
     _mount(app, orch, cfg)
     if autostart_voice:
         _autostart_voice(orch)
@@ -181,6 +189,53 @@ def _mount(app: FastAPI, orch: Orchestrator, cfg) -> None:
         orch.require_confirmation = not enabled  # hands-free => auto-confirm
         GUI_STATE.set(handsfree=enabled)
         return {"handsfree": enabled}
+
+    @app.get("/models")
+    def models() -> dict:
+        """List every selectable model across the user's providers (API keys).
+
+        Returns a flat list of {provider, model, label} so the HUD can offer
+        per-model selection, not just per-provider.
+        """
+        from jarvis.providers.registry import discover_models
+
+        discovered = discover_models()
+        current = GUI_STATE.model_id or GUI_STATE.model or orch.provider.model
+        entries = []
+        for prov, models in discovered.items():
+            for m in (models or [prov]):
+                entries.append({"provider": prov, "model": m,
+                                "label": f"{m}  ·  {prov}"})
+        return {"current": current, "models": entries}
+
+    @app.post("/select_model")
+    async def select_model(request: Request):
+        body = await request.json()
+        name = (body or {}).get("provider") or (body or {}).get("name")
+        model_id = (body or {}).get("model")
+        if not name:
+            return JSONResponse({"error": "provider required"}, status_code=400)
+        prov = getattr(orch, "_providers", {}).get(name)
+        if prov is None and name == "local":
+            from jarvis.providers.local import LocalProvider
+
+            prov = LocalProvider()
+        if prov is None:
+            return JSONResponse({"error": f"unknown provider: {name}"}, status_code=404)
+        # Allow picking a specific model id within the provider.
+        if model_id and model_id != getattr(prov, "model", None):
+            try:
+                prov = type(prov)(model=model_id,
+                                 base_url=getattr(prov, "base_url", None),
+                                 api_key=getattr(prov, "api_key", None),
+                                 vendor=getattr(prov, "vendor", None),
+                                 cache=getattr(prov, "cache", None),
+                                 **getattr(prov, "kwargs", {}))
+            except Exception:
+                pass  # fall back to provider's default model
+        orch.provider = prov
+        GUI_STATE.set(model=name, model_id=getattr(prov, "model", ""))
+        return {"provider": name, "model": getattr(prov, "model", "")}
 
     @app.get("/health")
     def health() -> dict:

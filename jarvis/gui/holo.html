@@ -66,6 +66,9 @@
   <div id="title">J.A.R.V.I.S</div>
   <div id="hint">// voice desktop control</div>
   <div id="bar">
+    <select id="model" class="btn" title="Select model / provider">
+      <option value="">model…</option>
+    </select>
     <button class="btn" id="mic">Mic: off</button>
     <button class="btn" id="handsfree">Hands-free: off</button>
   </div>
@@ -162,6 +165,39 @@ micBtn.onclick = async () => {
       body: JSON.stringify({ on: micOn, mode: hfBtn.classList.contains('on') ? 'continuous' : 'wake' }) });
   } catch (e) {}
 };
+const modelSel = document.getElementById('model');
+
+async function loadModels() {
+  try {
+    const data = await (await fetch('/models')).json();
+    const cur = data.current || '';
+    modelSel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = 'model…'; modelSel.appendChild(ph);
+    for (const m of (data.models || [])) {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify({ provider: m.provider, model: m.model });
+      opt.textContent = m.label;
+      if (m.model === cur) opt.selected = true;
+      modelSel.appendChild(opt);
+    }
+  } catch (e) { /* models endpoint optional */ }
+}
+modelSel.onchange = async () => {
+  const raw = modelSel.value;
+  if (!raw) return;
+  try {
+    const sel = JSON.parse(raw);
+    const r = await fetch('/select_model', { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(sel) });
+    const j = await r.json();
+    document.getElementById('notice').textContent =
+      `model: ${j.model || ''}` + (j.provider ? `  ·  ${j.provider}` : '');
+  } catch (e) {}
+};
+loadModels();
+
 hfBtn.onclick = async () => {
   const hfOn = !hfBtn.classList.contains('on');
   hfBtn.classList.toggle('on', hfOn);
