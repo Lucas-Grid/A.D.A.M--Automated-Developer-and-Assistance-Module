@@ -144,6 +144,18 @@ class VoiceInput:
         def _cb(indata, frames, t, status):
             q.put(bytes(indata))
 
+        # Barge-in via SPEECH ONSET detection (not raw loudness): Jarvis's own
+        # speaker output is steady-loud, so a simple threshold would cut him
+        # off mid-sentence (or never fire). We fire only on a rising edge from
+        # quiet -> loud (a real voice starting after silence), plus a short
+        # refractory window so one utterance triggers at most one interrupt.
+        SPEECH_ONSET = 350.0   # RMS that counts as "someone is talking"
+        QUIET = 120.0          # below this = silence
+        REFRACTORY_S = 1.2     # min seconds between barge triggers
+        import time as _t
+        was_quiet = True
+        last_barge = 0.0
+
         # Crash-safe: if the mic stream dies, restart it instead of ending the
         # listener (the assistant must keep listening at all times).
         while self._running:
@@ -152,12 +164,17 @@ class VoiceInput:
                                        dtype="int16", channels=1, callback=_cb):
                     while self._running:
                         data = q.get()
-                        if _rms(data) > 250:  # speech-level energy -> barge in
-                            if self.barge_callback is not None:
+                        energy = _rms(data)
+                        # Detect a fresh utterance: silence -> speech onset.
+                        if was_quiet and energy > SPEECH_ONSET:
+                            now = _t.time()
+                            if now - last_barge > REFRACTORY_S and self.barge_callback is not None:
+                                last_barge = now
                                 try:
                                     self.barge_callback()
                                 except Exception:
                                     pass
+                        was_quiet = energy < QUIET
                         if rec.AcceptWaveform(data):
                             text = _vosk_text(rec.Result())
                             self._handle(text)
@@ -170,8 +187,8 @@ class VoiceInput:
                                 self._handle(partial)
             except Exception as e:
                 print(f"[voice-input] mic stream error, restarting: {e}")
-                import time as _t
-                _t.sleep(1)
+                import time as _t2
+                _t2.sleep(1)
 
     def _loop_sr(self) -> None:
         import speech_recognition as sr

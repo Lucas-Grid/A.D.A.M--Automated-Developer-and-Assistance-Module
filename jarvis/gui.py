@@ -322,15 +322,18 @@ def _stop_voice() -> None:
 
 
 def _autostart_voice(orch: Orchestrator) -> None:
-    """If a voice backend is present, begin continuous listening on launch so
-    Jarvis responds to voice out of the box (say 'Jarvis' wake word, or full
-    hands-free if enabled)."""
+    """Begin listening on launch so Jarvis responds to voice out of the box.
+
+    Default is CONTINUOUS (always-on) listening: Jarvis hears every command
+    and keeps listening even while he is speaking, so you can interrupt him
+    mid-reply. (Wake-word-only mode is still available via the HUD toggle.)
+    """
     try:
         from jarvis.voice_input import VoiceInput
 
         if VoiceInput(lambda _: None).available:
-            _start_voice(orch, "wake")
-            GUI_STATE.set(mic_on=True, state="listening")
+            _start_voice(orch, "continuous")
+            GUI_STATE.set(mic_on=True, handsfree=True, state="listening")
     except Exception:
         pass
 
