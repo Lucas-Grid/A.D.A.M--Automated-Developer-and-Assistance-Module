@@ -61,7 +61,9 @@ class OpenAICompatibleProvider(LLMProvider):
         last_err: Exception | None = None
         # Transient failures (429 rate-limit, 5xx, timeouts) are retried with
         # exponential backoff + jitter so a single run survives NIM's throttling
-        # windows instead of burning the agent's step budget.
+        # windows instead of burning the agent's step budget. Auth errors
+        # (401/403) are NOT transient -- retrying them just loops on a dead key,
+        # so we surface them immediately with the offending URL.
         for attempt in range(4):
             try:
                 resp = requests.post(
@@ -83,8 +85,21 @@ class OpenAICompatibleProvider(LLMProvider):
             except requests.exceptions.Timeout:
                 last_err = RuntimeError(f"{self.vendor} request timed out (attempt {attempt + 1}/4)")
             except requests.exceptions.HTTPError as e:
-                # Retry on 5xx and 429 (transient rate-limiting); surface other 4xx.
                 code = getattr(e.response, "status_code", 0)
+                url = getattr(e.response, "url", f"{self.base_url}/chat/completions")
+                if code == 401:
+                    raise PermissionError(
+                        f"401 Unauthorized calling {url}. The API key is missing, "
+                        f"invalid, or not authorized for model '{self.model}'. "
+                        f"Check NVIDIA_NIM_API_KEY (or your provider key) is exported "
+                        f"in the shell that launched Jarvis."
+                    ) from e
+                if code == 403:
+                    raise PermissionError(
+                        f"403 Forbidden calling {url}. Your key is not authorized for "
+                        f"model '{self.model}' (or this endpoint)."
+                    ) from e
+                # Retry on 5xx and 429 (transient rate-limiting); surface other 4xx.
                 if code >= 500 or code == 429:
                     last_err = e
                 else:

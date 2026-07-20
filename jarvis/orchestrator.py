@@ -58,6 +58,19 @@ class Orchestrator:
 
         self.registry.register(ProjectBuilderTool(self))
 
+    # --- provider fallback (auth failure -> local brain) -------------------
+    def _using_local_fallback(self) -> bool:
+        from jarvis.providers.local import LocalProvider
+
+        return isinstance(self.provider, LocalProvider)
+
+    def _enable_local_fallback(self) -> None:
+        from jarvis.providers.local import LocalProvider
+
+        if not self._using_local_fallback():
+            self._original_provider = self.provider
+            self.provider = LocalProvider()
+
     # --- public API ---------------------------------------------------------
     def chat(self, user_input: str, verbose: bool = True) -> str:
         """Run one request through the agent loop and return the final answer."""
@@ -81,12 +94,26 @@ class Orchestrator:
             ]
             try:
                 result = self.provider.generate(messages)
+            except PermissionError as exc:
+                # Auth failure (401/403) on the hosted provider: don't loop on a
+                # dead key. Degrade to the always-available local brain for this
+                # turn if we haven't already, otherwise surface the cause once.
+                if not self._using_local_fallback():
+                    self._enable_local_fallback()
+                    if verbose:
+                        print(f"  [provider unauthorized] {exc} — falling back to local brain.")
+                    continue
+                err = f"[provider error] {exc}"
+                if verbose:
+                    print(f"  {err}")
+                return (f"I couldn't reach the AI provider ({exc}). "
+                        f"Check that your API key is valid and exported in the "
+                        f"shell that launched Jarvis.")
             except Exception as exc:  # provider/network failure -> retry the turn
                 err = f"[provider error] {exc}"
                 if verbose:
                     print(f"  {err} — retrying...")
                 self.short.add("system", err)
-                continue
             action = self._parse_action(result.text or "")
             if action is None:
                 # Final answer. Stream it token-by-token if the provider supports
@@ -357,8 +384,10 @@ class Orchestrator:
     def _confirm(self, tool: Any, args: dict) -> bool:
         if self._ask_confirm is not None:
             return self._ask_confirm(f"{tool.name}({_short_args(args)}) [{tool.danger}]")
-        # Default: auto-allow when confirmation disabled is handled by caller.
-        return True
+        # No confirmation callback supplied: never auto-allow a risky tool in a
+        # headless run. The caller only reaches here when require_confirmation
+        # is True, so deny by default to keep moderate/high actions gated.
+        return False
 
 
 def _looks_like_code(s: str) -> bool:
